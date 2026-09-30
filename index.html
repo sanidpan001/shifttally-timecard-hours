@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShiftTally — Free Time Card Calculator with Overtime &amp; Gross Pay</title>
+<meta name="description" content="ShiftTally is a free employee time card calculator: enter clock-in/out times and break minutes for the whole week, get daily hours, weekly totals, overtime splits (40h weekly, 8h daily, California double time) and a gross pay estimate. Print and CSV export. No signup.">
+<meta name="keywords" content="time card calculator, work hours calculator, time card calculator with lunch, overtime calculator, weekly hours calculator">
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How do I calculate total work hours from clock in and out times?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Subtract the clock-in time from the clock-out time, then subtract unpaid break minutes. For example, 9:00 AM to 5:30 PM is 8.5 hours; minus a 30-minute lunch break it is 8.0 paid hours. ShiftTally does this automatically for every day of the week and adds the days into a weekly total, converting everything to clean decimal hours."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between weekly and daily overtime rules?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A weekly overtime rule pays time-and-a-half only for hours above 40 in the whole week, which is the US federal FLSA standard. A daily overtime rule pays time-and-a-half for any hours above 8 in a single day, even if the weekly total stays under 40. ShiftTally lets you pick either rule and shows both calculations side by side so you can see the difference instantly."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does California overtime work with double time?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "California requires 1.5x pay for hours over 8 in a day (or over 40 in a week) and 2x pay for hours over 12 in a day, plus 1.5x for the first 8 hours and 2x after that on a seventh consecutive workday. ShiftTally's California mode applies all of these tiers automatically and breaks your weekly hours into regular, overtime, and double-time buckets."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I handle overnight shifts that cross midnight?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Enter the clock-in time normally and enter the clock-out time as the next-day time — for example 10:00 PM in and 6:00 AM out. ShiftTally detects that the clock-out is earlier than the clock-in and automatically rolls it past midnight, adding 24 hours to the math, so an 8-hour night shift calculates correctly."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How is gross pay calculated from my hours?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Gross pay equals regular hours times your hourly rate, plus overtime hours times the rate times 1.5, plus double-time hours times the rate times 2. For example, 40 regular hours plus 5 overtime hours at $15 per hour is $600 plus $112.50, or $712.50 before taxes and deductions. ShiftTally shows the exact split for every employee."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is ShiftTally free, and is my data private?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, ShiftTally is completely free with unlimited usage, no signup, no paywall, and no watermark. Everything runs in your browser: your time cards are saved only in your own device's local storage so your week is restored when you return, and nothing is ever sent to a server."
+      }
+    }
+  ]
+}
+</script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .num { font-variant-numeric: tabular-nums; }
+  .field { border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.4rem 0.55rem; font-size: 0.875rem; background: #fff; color: #0f172a; width: 100%; }
+  .field:focus { outline: 2px solid #FACC15; border-color: #1E3A5F; }
+  input[type="time"].field { min-width: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; font-weight: 700; padding: 0.28rem 0.65rem; border-radius: 9999px; letter-spacing: 0.02em; }
+  .day-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.55rem 0.65rem; border-radius: 0.6rem; }
+  .day-row:nth-child(odd) { background: #F3F4F6; }
+  .day-row:nth-child(even) { background: #ffffff; border: 1px solid #e5e7eb; }
+  .day-row.weekend { background: #FEF9C3; }
+  .rule-card input { accent-color: #1E3A5F; }
+  details.faq-item summary::-webkit-details-marker { display: none; }
+  details.faq-item[open] .faq-plus { transform: rotate(45deg); }
+  .faq-plus { transition: transform 0.2s ease; }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff !important; }
+    .print-card { box-shadow: none !important; border: 1px solid #999 !important; break-inside: avoid; }
+    .field { border: 1px solid #999; }
+  }
+</style>
+</head>
+<body id="top" class="bg-[#F3F4F6] text-slate-900 antialiased">
+
+<!-- ============ STICKY HEADER ============ -->
+<header class="no-print sticky top-0 z-50 bg-[#1E3A5F] text-white shadow-md">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 h-14 flex items-center justify-between">
+    <a href="#top" class="text-xl font-extrabold tracking-tight">ShiftTally<span class="text-[#FACC15]">.</span></a>
+    <nav class="text-sm font-semibold space-x-5">
+      <a href="#top" class="hover:text-[#FACC15] transition">Home</a>
+      <a href="https://fixoraa.tech" class="hover:text-[#FACC15] transition">More Tools</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="no-print bg-[#1E3A5F] text-white">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 pb-8 pt-6">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="chip bg-[#FACC15] text-[#1E3A5F]">Unlimited Free Usage</span>
+      <span class="chip bg-white/15 text-white border border-white/25">No signup &middot; No paywall &middot; No watermark</span>
+    </div>
+    <h1 class="mt-4 text-3xl sm:text-4xl font-extrabold tracking-tight">Employee Time Card Hours Calculator</h1>
+    <p class="mt-2 max-w-2xl text-slate-200">Enter clock-in / clock-out times and break minutes for every day. ShiftTally totals the week, splits regular vs overtime vs double-time pay, and estimates gross pay — for as many employees as you need.</p>
+  </div>
+</section>
+
+<!-- TOP AD (above the tool) -->
+<div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pt-4" role="complementary" aria-label="Advertisement">
+  <div class="mx-auto text-center" style="max-width:728px">
+    <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+    <div class="flex justify-center overflow-hidden">
+      <div class="origin-top scale-[0.44] sm:scale-100 shrink-0">
+        <script>
+          atOptions = { 'key' : '4e68ac77881c17fe128a46565d9a4e8c', 'format' : 'iframe', 'height' : 90, 'width' : 728, 'params' : {} };
+        </script>
+        <script src="https://www.highrevenueformat.com/4e68ac77881c17fe128a46565d9a4e8c/invoke.js"></script>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TOOL ============ -->
+<main id="tool" class="mx-auto max-w-6xl px-4 sm:px-6 py-6 sm:py-8">
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] items-start">
+
+    <div class="min-w-0">
+      <!-- Settings card -->
+      <section class="no-print print-card bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 mb-6">
+        <h2 class="text-sm font-extrabold uppercase tracking-wider text-[#1E3A5F]">Payroll settings</h2>
+        <div class="mt-3 grid gap-3 md:grid-cols-3">
+          <label class="rule-card flex items-start gap-2.5 rounded-xl border-2 border-[#1E3A5F] bg-[#F3F4F6] p-3 cursor-pointer">
+            <input type="radio" name="rule" value="weekly40" class="mt-1" checked>
+            <span>
+              <span class="block text-sm font-bold">40-hour weekly</span>
+              <span class="block text-xs text-slate-500">1.5&times; for hours over 40/week (US federal FLSA)</span>
+            </span>
+          </label>
+          <label class="rule-card flex items-start gap-2.5 rounded-xl border-2 border-slate-200 p-3 cursor-pointer hover:border-[#1E3A5F]">
+            <input type="radio" name="rule" value="daily8" class="mt-1">
+            <span>
+              <span class="block text-sm font-bold">8-hour daily</span>
+              <span class="block text-xs text-slate-500">1.5&times; for hours over 8 in a single day</span>
+            </span>
+          </label>
+          <label class="rule-card flex items-start gap-2.5 rounded-xl border-2 border-slate-200 p-3 cursor-pointer hover:border-[#1E3A5F]">
+            <input type="radio" name="rule" value="ca" class="mt-1">
+            <span>
+              <span class="block text-sm font-bold">California</span>
+              <span class="block text-xs text-slate-500">1.5&times; over 8h/day, 2&times; over 12h/day + weekly rules</span>
+            </span>
+          </label>
+        </div>
+        <div class="mt-3 flex flex-wrap items-end gap-4">
+          <label class="block">
+            <span class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Week starting</span>
+            <input id="weekStart" type="date" class="field w-auto">
+          </label>
+          <label class="block">
+            <span class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Currency symbol</span>
+            <input id="currency" type="text" maxlength="3" value="$" class="field w-20 text-center">
+          </label>
+          <p class="text-xs text-slate-500"><span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span><span id="saveStatus">Time cards auto-save to this device</span></p>
+        </div>
+      </section>
+
+      <!-- Employee cards -->
+      <div id="employees" class="space-y-6"></div>
+
+      <!-- Action buttons -->
+      <div class="no-print mt-6 flex flex-wrap gap-3">
+        <button id="addEmployee" class="rounded-xl bg-[#1E3A5F] px-5 py-2.5 text-sm font-bold text-white shadow hover:bg-[#16304f] transition">+ Add employee</button>
+        <button id="printBtn" class="rounded-xl bg-[#FACC15] px-5 py-2.5 text-sm font-bold text-[#1E3A5F] shadow hover:bg-[#eab308] transition">Print time cards</button>
+        <button id="csvBtn" class="rounded-xl border-2 border-[#1E3A5F] px-5 py-2.5 text-sm font-bold text-[#1E3A5F] hover:bg-[#1E3A5F] hover:text-white transition">Export CSV</button>
+        <button id="resetBtn" class="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-red-600 transition">Reset week</button>
+      </div>
+    </div>
+
+    <!-- Totals sidebar -->
+    <aside id="totalsSidebar" class="print-card lg:sticky lg:top-20 bg-[#1E3A5F] text-white rounded-2xl shadow-md p-4 sm:p-5">
+      <h2 class="text-sm font-extrabold uppercase tracking-wider text-[#FACC15]">Week totals</h2>
+      <p id="ruleNote" class="mt-1 text-xs text-slate-300"></p>
+      <div id="sidebarEmployees" class="mt-3 space-y-3"></div>
+      <div class="mt-4 border-t border-white/20 pt-4">
+        <div class="flex justify-between text-sm"><span class="text-slate-300">All employees</span><span id="grandEmp" class="num font-bold">0</span></div>
+        <div class="mt-2 grid grid-cols-2 gap-2 text-center">
+          <div class="rounded-lg bg-white/10 p-2"><div class="text-[11px] uppercase tracking-wide text-slate-300">Regular</div><div id="grandReg" class="num text-lg font-extrabold">0.00</div></div>
+          <div class="rounded-lg bg-white/10 p-2"><div class="text-[11px] uppercase tracking-wide text-slate-300">Overtime</div><div id="grandOt" class="num text-lg font-extrabold text-[#FACC15]">0.00</div></div>
+          <div class="rounded-lg bg-white/10 p-2"><div class="text-[11px] uppercase tracking-wide text-slate-300">Double</div><div id="grandDbl" class="num text-lg font-extrabold text-orange-300">0.00</div></div>
+          <div class="rounded-lg bg-white/10 p-2"><div class="text-[11px] uppercase tracking-wide text-slate-300">Total hrs</div><div id="grandHrs" class="num text-lg font-extrabold">0.00</div></div>
+        </div>
+        <div class="mt-3 rounded-lg bg-[#FACC15] text-[#1E3A5F] p-3 text-center">
+          <div class="text-[11px] font-bold uppercase tracking-wide">Combined gross pay</div>
+          <div id="grandPay" class="num text-2xl font-extrabold">$0.00</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+/* __PURE_START__ */
+/* ---- ShiftTally pure time-card logic (no DOM) ---- */
+var DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+var MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+var REG_CAP_MIN = 480;    // 8h per day
+var DAILY_OT_CAP_MIN = 720; // 12h per day (CA double-time threshold)
+var WEEK_CAP_MIN = 2400;  // 40h per week
+var STORE_KEY = 'shifttally-v1';
+
+function parseTime(str) {
+  if (str === null || str === undefined || typeof str !== 'string') return null;
+  var m = str.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!m) return null;
+  var h = parseInt(m[1], 10), mi = parseInt(m[2], 10);
+  if (h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+
+function dayCalc(inStr, outStr, breakRaw) {
+  var inMin = parseTime(inStr), outMin = parseTime(outStr);
+  var brk = Math.max(0, Math.floor(Number(breakRaw) || 0));
+  var res = { inMin: inMin, outMin: outMin, breakMin: brk, overnight: false,
+              shiftMin: 0, workedMin: 0, empty: false, breakClamped: false };
+  if (inMin === null || outMin === null) { res.empty = true; return res; }
+  var shift = outMin - inMin;
+  if (shift <= 0) { shift += 1440; res.overnight = true; }
+  res.shiftMin = shift;
+  if (brk > shift) { res.breakMin = shift; res.breakClamped = true; }
+  res.workedMin = shift - res.breakMin;
+  return res;
+}
+
+/* Split one day's worked minutes into regular / overtime / double buckets. */
+function dayBuckets(workedMin, rule, isSeventh) {
+  var r = { reg: 0, ot: 0, dbl: 0 };
+  workedMin = Math.max(0, Math.round(workedMin));
+  if (rule === 'daily8') {
+    r.reg = Math.min(workedMin, REG_CAP_MIN);
+    r.ot = Math.max(0, workedMin - REG_CAP_MIN);
+  } else if (rule === 'ca') {
+    if (isSeventh && workedMin > 0) {
+      r.ot = Math.min(workedMin, REG_CAP_MIN);
+      r.dbl = Math.max(0, workedMin - REG_CAP_MIN);
+    } else {
+      r.reg = Math.min(workedMin, REG_CAP_MIN);
+      var rest = Math.max(0, workedMin - REG_CAP_MIN);
+      r.ot = Math.min(rest, DAILY_OT_CAP_MIN - REG_CAP_MIN);
+      r.dbl = Math.max(0, rest - (DAILY_OT_CAP_MIN - REG_CAP_MIN));
+    }
+  } else { /* weekly40 */
+    r.reg = workedMin;
+  }
+  return r;
+}
+
+/* Compute a full 7-day week. dayWorked: array of 7 worked-minute values.
+   rateCents: hourly rate in minor currency units (e.g. cents). */
+function computeWeek(dayWorked, rule, rateCents) {
+  var days = [];
+  for (var i = 0; i < 7; i++) days.push(Math.max(0, Math.round(dayWorked[i] || 0)));
+  var seventh = rule === 'ca' && days.every(function (m) { return m > 0; });
+  var reg = 0, ot = 0, dbl = 0, total = 0;
+  days.forEach(function (m, i) {
+    total += m;
+    if (rule === 'weekly40') {
+      if (reg + m <= WEEK_CAP_MIN) { reg += m; }
+      else { var room = Math.max(0, WEEK_CAP_MIN - reg); reg += room; ot += (m - room); }
+    } else {
+      var b = dayBuckets(m, rule, seventh && i === 6);
+      reg += b.reg; ot += b.ot; dbl += b.dbl;
+    }
+  });
+  if (rule === 'ca' && reg > WEEK_CAP_MIN) {
+    ot += (reg - WEEK_CAP_MIN);
+    reg = WEEK_CAP_MIN;
+  }
+  var rate = Math.max(0, Number(rateCents) || 0);
+  var payCents = Math.round((reg * rate + ot * rate * 1.5 + dbl * rate * 2) / 60);
+  return { regMin: reg, otMin: ot, dblMin: dbl, totalMin: total,
+           payCents: payCents, seventhRule: seventh };
+}
+
+function aggregateWeeks(weekResults) {
+  var agg = { employees: weekResults.length, regMin: 0, otMin: 0, dblMin: 0, totalMin: 0, payCents: 0 };
+  weekResults.forEach(function (w) {
+    agg.regMin += w.regMin; agg.otMin += w.otMin; agg.dblMin += w.dblMin;
+    agg.totalMin += w.totalMin; agg.payCents += w.payCents;
+  });
+  return agg;
+}
+
+function fmtH(min) { return (Math.round(min) / 60).toFixed(2); }
+function fmtDur(min) {
+  min = Math.max(0, Math.round(min));
+  var h = Math.floor(min / 60), m = min % 60;
+  return h + 'h ' + (m < 10 ? '0' + m : m) + 'm';
+}
+function fmtMoney(cents, sym) {
+  var s = (sym === undefined || sym === null || sym === '') ? '$' : String(sym);
+  var neg = cents < 0;
+  var v = (Math.abs(Math.round(cents)) / 100).toFixed(2);
+  return (neg ? '-' : '') + s + v;
+}
+
+function dayLabels(weekStartISO) {
+  var out = [], i, d = null;
+  if (weekStartISO) {
+    var t = new Date(weekStartISO + 'T00:00:00Z');
+    if (!isNaN(t.getTime())) d = t;
+  }
+  for (i = 0; i < 7; i++) {
+    var name = DAY_NAMES[i], date = '';
+    if (d) {
+      var dd = new Date(d);
+      dd.setUTCDate(dd.getUTCDate() + i);
+      date = dd.getUTCDate() + ' ' + MONTH_NAMES[dd.getUTCMonth()];
+    }
+    out.push({ name: name, date: date, weekend: (i === 5 || i === 6) });
+  }
+  return out;
+}
+
+function csvCell(v) {
+  v = String(v === null || v === undefined ? '' : v);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+
+/* Build a CSV for the whole payroll week. employees: [{name, rateCents, currency,
+   days: [{label, date, inStr, outStr, breakMin, workedMin}], week: computeWeek result}] */
+function buildCSV(employees, rule, weekStartISO) {
+  var lines = [];
+  lines.push(['Employee', 'Day', 'Date', 'Clock in', 'Clock out', 'Break (min)', 'Worked (hrs)',
+              'Regular (hrs)', 'Overtime (hrs)', 'Double-time (hrs)', 'Pay rate', 'Gross pay'].join(','));
+  employees.forEach(function (e) {
+    var sym = e.currency;
+    e.days.forEach(function (d, di) {
+      var b = (rule === 'weekly40') ? { reg: d.workedMin, ot: 0, dbl: 0 }
+            : dayBuckets(d.workedMin, rule, e.week.seventhRule && di === 6);
+      lines.push([
+        csvCell(e.name), csvCell(d.label), csvCell(d.date), csvCell(d.inStr), csvCell(d.outStr),
+        d.breakMin, fmtH(d.workedMin), fmtH(b.reg), fmtH(b.ot), fmtH(b.dbl),
+        csvCell(sym + (Math.round(e.rateCents) / 100).toFixed(2) + '/hr'), ''
+      ].join(','));
+    });
+    lines.push([
+      csvCell(e.name), 'WEEK TOTAL', csvCell(weekStartISO || ''), '', '', '',
+      fmtH(e.week.totalMin), fmtH(e.week.regMin), fmtH(e.week.otMin), fmtH(e.week.dblMin),
+      '', csvCell(fmtMoney(e.week.payCents, sym))
+    ].join(','));
+  });
+  var agg = aggregateWeeks(employees.map(function (e) { return e.week; }));
+  lines.push(['ALL EMPLOYEES', '', '', '', '', '', fmtH(agg.totalMin), fmtH(agg.regMin),
+              fmtH(agg.otMin), fmtH(agg.dblMin), '', fmtMoney(agg.payCents, employees[0] ? employees[0].currency : '$')].join(','));
+  return lines.join('\r\n');
+}
+
+/* ---- state (de)serialization for localStorage ---- */
+function blankDay() { return { in: '', out: '', brk: '' }; }
+function blankEmployee(n) {
+  var days = [];
+  for (var i = 0; i < 7; i++) days.push(blankDay());
+  return { id: 'emp' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
+           name: n || '', rate: '', days: days };
+}
+function blankState() {
+  return { rule: 'weekly40', weekStart: '', currency: '$', employees: [blankEmployee('Employee 1')] };
+}
+function cleanDay(d) {
+  d = d || {};
+  return { in: typeof d.in === 'string' ? d.in.slice(0, 8) : '',
+           out: typeof d.out === 'string' ? d.out.slice(0, 8) : '',
+           brk: (d.brk === undefined || d.brk === null) ? '' : String(d.brk).slice(0, 4) };
+}
+function serializeState(s) {
+  var st = {
+    rule: (s.rule === 'daily8' || s.rule === 'ca') ? s.rule : 'weekly40',
+    weekStart: typeof s.weekStart === 'string' ? s.weekStart.slice(0, 10) : '',
+    currency: typeof s.currency === 'string' ? s.currency.slice(0, 3) : '$',
+    employees: (s.employees || []).map(function (e, i) {
+      var days = [];
+      for (var k = 0; k < 7; k++) days.push(cleanDay(e.days && e.days[k]));
+      return { id: typeof e.id === 'string' ? e.id : ('emp' + i),
+               name: typeof e.name === 'string' ? e.name.slice(0, 60) : '',
+               rate: (e.rate === undefined || e.rate === null) ? '' : String(e.rate).slice(0, 10),
+               days: days };
+    })
+  };
+  if (!st.employees.length) st.employees.push(blankEmployee('Employee 1'));
+  return JSON.stringify(st);
+}
+function parseState(json) {
+  try {
+    var o = JSON.parse(json);
+    if (!o || typeof o !== 'object' || !Array.isArray(o.employees)) return null;
+    return JSON.parse(serializeState(o));
+  } catch (e) { return null; }
+}
+/* __PURE_END__ */
+
+/* ---- ShiftTally app (DOM) ---- */
+(function () {
+  'use strict';
+  var state = blankState();
+  var employeesEl = document.getElementById('employees');
+  var sidebarEl = document.getElementById('sidebarEmployees');
+  var saveTimer = null;
+
+  var RULE_NOTES = {
+    weekly40: 'Rule: 1.5\u00d7 pay for hours over 40 in the week.',
+    daily8: 'Rule: 1.5\u00d7 pay for hours over 8 in any day.',
+    ca: 'Rule: 1.5\u00d7 over 8h/day, 2\u00d7 over 12h/day, 7th-day rules apply.'
+  };
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) { var s = parseState(raw); if (s) state = s; }
+    } catch (e) { /* storage unavailable: keep defaults */ }
+    if (!state.weekStart) {
+      var d = new Date();
+      var dow = (d.getDay() + 6) % 7; // Monday = 0
+      d.setDate(d.getDate() - dow);
+      state.weekStart = d.toISOString().slice(0, 10);
+    }
+  }
+
+  function save() {
+    var status = document.getElementById('saveStatus');
+    try {
+      localStorage.setItem(STORE_KEY, serializeState(state));
+      if (status) status.textContent = 'Saved automatically \u00b7 ' + new Date().toLocaleTimeString();
+    } catch (e) {
+      if (status) status.textContent = 'Auto-save unavailable in this browser';
+    }
+  }
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 400);
+  }
+
+  function dayRowHTML(empIdx, dayIdx, label) {
+    return '' +
+    '<div class="day-row' + (label.weekend ? ' weekend' : '') + '" data-emp="' + empIdx + '" data-day="' + dayIdx + '">' +
+      '<div class="w-16 shrink-0"><div class="text-sm font-extrabold text-[#1E3A5F]">' + label.name + '</div>' +
+      '<div class="text-[11px] text-slate-500">' + label.date + '</div></div>' +
+      '<label class="flex-1 min-w-[104px]"><span class="sr-only">Clock in ' + label.name + '</span>' +
+        '<input type="time" class="field din" data-f="in" aria-label="Clock in ' + label.name + '"></label>' +
+      '<label class="flex-1 min-w-[104px]"><span class="sr-only">Clock out ' + label.name + '</span>' +
+        '<input type="time" class="field dout" data-f="out" aria-label="Clock out ' + label.name + '"></label>' +
+      '<label class="w-[74px] shrink-0"><span class="sr-only">Break minutes ' + label.name + '</span>' +
+        '<input type="number" min="0" max="1440" inputmode="numeric" placeholder="Brk" class="field dbrk num" data-f="brk" aria-label="Break minutes ' + label.name + '"></label>' +
+      '<div class="w-[64px] shrink-0 text-right"><span class="dhours num inline-block min-w-[3.2rem] rounded-md bg-[#1E3A5F] px-1.5 py-1 text-xs font-extrabold text-white">0.00</span>' +
+      '<div class="dnote text-[10px] font-bold text-indigo-600 h-3"></div></div>' +
+    '</div>';
+  }
+
+  function cardHTML(emp, empIdx, labels) {
+    var rows = '';
+    for (var i = 0; i < 7; i++) rows += dayRowHTML(empIdx, i, labels[i]);
+    return '' +
+    '<article class="print-card emp-card bg-white rounded-2xl shadow-sm border-t-4 border-[#1E3A5F] border-x border-b border-slate-200 p-4 sm:p-5" data-emp="' + empIdx + '">' +
+      '<div class="flex flex-wrap items-center gap-3">' +
+        '<input type="text" class="ename field font-extrabold !w-auto flex-1 min-w-[140px] !border-transparent !text-lg hover:!border-slate-300 focus:!border-[#1E3A5F]" maxlength="60" placeholder="Employee name" value="' + escAttr(emp.name) + '" aria-label="Employee name">' +
+        '<label class="flex items-center gap-1.5 text-sm font-bold text-slate-600">$<span class="sr-only">Hourly pay rate</span>' +
+          '<input type="number" min="0" step="0.01" inputmode="decimal" placeholder="Rate/hr" class="erate field num w-24" value="' + escAttr(emp.rate) + '" aria-label="Hourly pay rate"></label>' +
+        '<button type="button" class="eremove no-print ml-auto rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-400 hover:text-red-600 hover:bg-red-50 transition" aria-label="Remove employee">Remove \u00d7</button>' +
+      '</div>' +
+      '<div class="mt-2 flex text-[11px] font-bold uppercase tracking-wide text-slate-400 px-1">' +
+        '<span class="w-16">Day</span><span class="flex-1 min-w-[104px]">Clock in</span><span class="flex-1 min-w-[104px]">Clock out</span><span class="w-[74px]">Break&nbsp;min</span><span class="w-[64px] text-right">Hours</span>' +
+      '</div>' +
+      '<div class="mt-1 space-y-1">' + rows + '</div>' +
+      '<div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-xl bg-[#F3F4F6] p-3 text-center">' +
+        '<div><div class="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Regular</div><div class="ereg num text-lg font-extrabold text-[#1E3A5F]">0.00</div></div>' +
+        '<div><div class="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Overtime</div><div class="eot num text-lg font-extrabold text-amber-600">0.00</div></div>' +
+        '<div><div class="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Double-time</div><div class="edbl num text-lg font-extrabold text-orange-600">0.00</div></div>' +
+        '<div><div class="text-[11px] uppercase tracking-wide text-slate-500 font-bold">Gross pay</div><div class="epay num text-lg font-extrabold text-emerald-700">$0.00</div></div>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function escAttr(s) { return String(s === undefined || s === null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  function renderAll() {
+    document.querySelectorAll('input[name="rule"]').forEach(function (r) {
+      r.checked = (r.value === state.rule);
+      var card = r.closest('.rule-card');
+      if (card) card.classList.toggle('border-[#1E3A5F]', r.checked), card.classList.toggle('bg-[#F3F4F6]', r.checked);
+    });
+    document.getElementById('weekStart').value = state.weekStart;
+    document.getElementById('currency').value = state.currency || '$';
+    var labels = dayLabels(state.weekStart);
+    employeesEl.innerHTML = state.employees.map(function (e, i) { return cardHTML(e, i, labels); }).join('');
+    state.employees.forEach(function (e, i) {
+      var card = employeesEl.children[i];
+      card.querySelectorAll('.day-row').forEach(function (row) {
+        var di = +row.getAttribute('data-day'), d = e.days[di];
+        row.querySelector('.din').value = d.in;
+        row.querySelector('.dout').value = d.out;
+        row.querySelector('.dbrk').value = d.brk;
+      });
+    });
+    recalc();
+  }
+
+  function recalc() {
+    var sym = (document.getElementById('currency').value || '$').slice(0, 3);
+    state.currency = sym;
+    var labels = dayLabels(state.weekStart);
+    var weeks = [];
+    state.employees.forEach(function (e, i) {
+      var card = employeesEl.children[i];
+      if (!card) return;
+      var worked = [], dayRecs = [];
+      card.querySelectorAll('.day-row').forEach(function (row) {
+        var di = +row.getAttribute('data-day');
+        var inV = row.querySelector('.din').value, outV = row.querySelector('.dout').value, brkV = row.querySelector('.dbrk').value;
+        e.days[di] = { in: inV, out: outV, brk: brkV };
+        var dc = dayCalc(inV, outV, brkV);
+        worked.push(dc.workedMin);
+        var hrsEl = row.querySelector('.dhours'), noteEl = row.querySelector('.dnote');
+        hrsEl.textContent = fmtH(dc.workedMin);
+        var notes = [];
+        if (dc.overnight && !dc.empty) notes.push('\u{1F319} overnight');
+        if (dc.breakClamped) notes.push('break capped');
+        noteEl.textContent = notes.join(' \u00b7 ');
+        hrsEl.className = 'dhours num inline-block min-w-[3.2rem] rounded-md px-1.5 py-1 text-xs font-extrabold ' +
+          (dc.empty ? 'bg-slate-300 text-slate-600' : 'bg-[#1E3A5F] text-white');
+        dayRecs.push({ label: labels[di].name, date: labels[di].date, inStr: inV, outStr: outV,
+                       breakMin: dc.breakMin, workedMin: dc.workedMin });
+      });
+      var rateCents = Math.round(Math.max(0, parseFloat(e.rate) || 0) * 100);
+      var wk = computeWeek(worked, state.rule, rateCents);
+      weeks.push(wk);
+      card.querySelector('.ereg').textContent = fmtH(wk.regMin);
+      card.querySelector('.eot').textContent = fmtH(wk.otMin);
+      card.querySelector('.edbl').textContent = fmtH(wk.dblMin);
+      card.querySelector('.epay').textContent = fmtMoney(wk.payCents, sym);
+      e._week = wk; e._dayRecs = dayRecs; e._rateCents = rateCents;
+    });
+    renderSidebar(weeks, sym);
+    scheduleSave();
+  }
+
+  function renderSidebar(weeks, sym) {
+    document.getElementById('ruleNote').textContent = RULE_NOTES[state.rule] || '';
+    sidebarEl.innerHTML = state.employees.map(function (e, i) {
+      var wk = weeks[i] || { regMin: 0, otMin: 0, dblMin: 0, totalMin: 0, payCents: 0 };
+      return '<div class="rounded-xl bg-white/10 p-3">' +
+        '<div class="flex justify-between items-baseline gap-2"><span class="text-sm font-bold truncate">' + escAttr(e.name || ('Employee ' + (i + 1))) + '</span>' +
+        '<span class="num text-sm font-extrabold text-[#FACC15] whitespace-nowrap">' + fmtMoney(wk.payCents, sym) + '</span></div>' +
+        '<div class="num mt-1 text-xs text-slate-300">' + fmtH(wk.totalMin) + 'h total &middot; ' +
+        fmtH(wk.regMin) + ' reg &middot; ' + fmtH(wk.otMin) + ' OT &middot; ' + fmtH(wk.dblMin) + ' 2\u00d7</div></div>';
+    }).join('');
+    var agg = aggregateWeeks(weeks);
+    document.getElementById('grandEmp').textContent = agg.employees;
+    document.getElementById('grandReg').textContent = fmtH(agg.regMin);
+    document.getElementById('grandOt').textContent = fmtH(agg.otMin);
+    document.getElementById('grandDbl').textContent = fmtH(agg.dblMin);
+    document.getElementById('grandHrs').textContent = fmtH(agg.totalMin);
+    document.getElementById('grandPay').textContent = fmtMoney(agg.payCents, sym);
+  }
+
+  /* ---- events ---- */
+  document.querySelectorAll('input[name="rule"]').forEach(function (r) {
+    r.addEventListener('change', function () { state.rule = r.value; renderAll(); });
+  });
+  document.getElementById('weekStart').addEventListener('change', function (e) { state.weekStart = e.target.value; renderAll(); });
+  document.getElementById('currency').addEventListener('input', function () { recalc(); });
+  employeesEl.addEventListener('input', function (e) {
+    var card = e.target.closest('.emp-card');
+    if (!card) return;
+    var i = +card.getAttribute('data-emp');
+    if (e.target.classList.contains('ename')) state.employees[i].name = e.target.value;
+    if (e.target.classList.contains('erate')) state.employees[i].rate = e.target.value;
+    recalc();
+  });
+  employeesEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('.eremove');
+    if (!btn) return;
+    var card = btn.closest('.emp-card');
+    var i = +card.getAttribute('data-emp');
+    if (state.employees.length <= 1) { state.employees[0] = blankEmployee('Employee 1'); }
+    else { state.employees.splice(i, 1); }
+    renderAll();
+  });
+  document.getElementById('addEmployee').addEventListener('click', function () {
+    state.employees.push(blankEmployee('Employee ' + (state.employees.length + 1)));
+    renderAll();
+    var last = employeesEl.lastElementChild;
+    if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'start' }); var nm = last.querySelector('.ename'); if (nm) nm.focus(); }
+  });
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    if (!confirm('Clear all times for this week? Employees and settings are kept.')) return;
+    state.employees.forEach(function (e, i) {
+      for (var k = 0; k < 7; k++) e.days[k] = blankDay();
+      if (!e.name) e.name = 'Employee ' + (i + 1);
+    });
+    renderAll();
+  });
+  document.getElementById('printBtn').addEventListener('click', function () { window.print(); });
+  document.getElementById('csvBtn').addEventListener('click', function () {
+    var sym = state.currency || '$';
+    var payload = state.employees.map(function (e) {
+      return { name: e.name || 'Employee', rateCents: e._rateCents || 0, currency: sym,
+               days: e._dayRecs || [], week: e._week || computeWeek([0,0,0,0,0,0,0], state.rule, 0) };
+    });
+    var csv = buildCSV(payload, state.rule, state.weekStart);
+    var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'shifttally-week-' + (state.weekStart || 'export') + '.csv';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  });
+
+  load();
+  renderAll();
+})();
+</script>
+
+<!-- BOTTOM AD (below the tool) -->
+<div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pb-4" role="complementary" aria-label="Advertisement">
+  <div class="mx-auto text-center" style="max-width:728px">
+    <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+    <div class="flex justify-center overflow-hidden">
+      <script async src="https://js.wpadmngr.com/static/adManager.js" data-admpid="464498"></script>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SEO ARTICLE ============ -->
+<section class="no-print mx-auto max-w-6xl px-4 sm:px-6 pb-10">
+  <article class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-8 prose-headings:text-[#1E3A5F]">
+    <h2 class="text-2xl sm:text-3xl font-extrabold text-[#1E3A5F]">The complete guide to time cards, work hours, and overtime pay</h2>
+    <p class="mt-4 text-slate-700 leading-relaxed">A time card is the foundation of every payroll. Whether it is a paper sheet pinned next to the punch clock, a spreadsheet, or an app like ShiftTally, its job is the same: record exactly when each employee started and stopped working, subtract unpaid breaks, and turn those raw times into paid hours that payroll can trust. Get the math wrong and you underpay people — which destroys morale and can create legal liability — or overpay them, which quietly bleeds the business every single pay period. A reliable <strong>time card calculator</strong> removes the guesswork by converting clock-in and clock-out times into clean decimal hours, applying the right overtime rule automatically, and producing a gross pay estimate you can hand to payroll with confidence.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">How work hours are calculated from clock times</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">The core formula is simple: <strong>paid hours = (clock-out time &minus; clock-in time) &minus; unpaid break minutes</strong>. A shift from 9:00 AM to 5:30 PM spans 8.5 hours; subtract a 30-minute lunch and you have 8.0 paid hours. Most payroll systems want that answer in decimal hours (8.50) rather than hours and minutes (8:30), because decimals multiply cleanly against an hourly rate. This is the number-one source of manual errors: people read 8:45 as 8.45 hours when it is really 8.75 hours, and that 0.30-hour mistake repeats every day. A dedicated <strong>work hours calculator</strong> does the conversion for you, so 7 hours 30 minutes always becomes 7.50, never 7.30.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">Breaks need care. Lunch breaks are usually unpaid, so they come off the total — this is what people mean when they search for a <strong>time card calculator with lunch</strong>. Short rest breaks, typically 10 to 20 minutes, are paid working time in many jurisdictions and should not be deducted. Overnight shifts add another wrinkle: a night shift from 10:00 PM to 6:00 AM crosses midnight, so the clock-out time is numerically earlier than the clock-in time. The correct handling is to treat the clock-out as belonging to the next day, adding 24 hours before subtracting. ShiftTally detects this automatically and marks the day as overnight, so night-shift workers never have to do midnight arithmetic in their heads.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">Weekly vs daily overtime: which rule applies to you?</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">Overtime rules decide which hours earn the 1.5&times; premium, and the answer changes everything. Under the US federal Fair Labor Standards Act (FLSA), the standard is a <strong>weekly</strong> threshold: hours beyond 40 in a single workweek are paid at time-and-a-half. If you work four 10-hour days (40 hours total), no overtime is owed under federal law — even though each day exceeded 8 hours. Many states and many company policies instead use a <strong>daily</strong> threshold: any hours beyond 8 in a single day earn overtime, regardless of the weekly total. With a daily rule, those same four 10-hour days produce 8 overtime hours. That is a 20% pay difference for identical work, which is why an <strong>overtime calculator</strong> that lets you switch rules is so valuable: you can see exactly what each interpretation costs.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">The distinction matters for scheduling too. Under a weekly rule, a manager can compress schedules into longer days without triggering overtime, as long as the week stays at 40. Under a daily rule, every long day costs extra, which pushes schedules toward even 8-hour days. Neither is universally better — it depends on the business — but everyone involved should be able to compute both. ShiftTally keeps all three of the most common rule sets one click away, so a supervisor in Texas, a nurse in Alaska (which uses daily overtime), and a warehouse team in California can each get the right answer from the same tool.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">California overtime and double time, explained</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">California has the most employee-friendly overtime rules in the United States, with three layers. First, the <strong>daily</strong> layer: hours 8 through 12 in a single day are paid at 1.5&times;, and hours beyond 12 are paid at 2&times; (double time). Second, the <strong>weekly</strong> layer: hours beyond 40 in the week that have not already been counted as daily overtime are paid at 1.5&times;. Third, the <strong>seventh consecutive day</strong> layer: on the seventh straight day of work in a workweek, the first 8 hours are paid at 1.5&times; and anything beyond 8 at 2&times;. A 13-hour shift in California therefore splits into 8 regular hours, 4 overtime hours, and 1 double-time hour — a split that is genuinely hard to do by hand across a whole team, and exactly the kind of math ShiftTally's California mode automates.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">Double time is not unique to California — some union contracts and company policies use it too — but California is the biggest jurisdiction that mandates it by statute. If you manage hourly workers there, a <strong>weekly hours calculator</strong> without double-time support is simply incomplete. The same logic applies anywhere a premium tier exists: once you define the thresholds (8 hours, 12 hours, 40 hours), the rest is mechanical, and mechanical work is what calculators are for.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">From hours to gross pay: the payroll math</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">Gross pay is pay before taxes, benefits, and other deductions. The formula follows directly from the hour buckets: <strong>gross pay = (regular hours &times; rate) + (overtime hours &times; rate &times; 1.5) + (double-time hours &times; rate &times; 2)</strong>. Take an employee at $18 per hour who works 45 hours under a weekly rule: 40 &times; $18 = $720, plus 5 &times; $27 = $135, for $855 gross. Change the rule to daily overtime with two 10-hour days and the overtime bucket grows, so the gross changes too. ShiftTally shows the split — regular, overtime, double-time — next to the dollar figure, so the number is auditable instead of mysterious.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">A few practical details make estimates more accurate. Round each day's hours the same way your payroll does — many systems round clock times to the nearest quarter hour, so a 9:02 clock-in becomes 9:00. Keep the workweek definition consistent: the FLSA workweek is any fixed 7-day period, and overtime is computed per workweek, not per pay period. And remember that salaried-exempt employees are not covered by these rules at all; overtime law applies to non-exempt hourly workers. ShiftTally's estimate assumes straight hourly pay with no shift differentials, bonuses, or tax withholding — it is a gross pay <em>estimate</em> for planning and verification, and your actual paycheck comes from your employer's payroll system.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">Time card best practices for employees</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">The best time card habit is also the simplest: record times when they happen. Clock in when you start, clock out when you leave, and note your lunch break the same day. Reconstructing a week from memory on Friday afternoon is how phantom hours and missing breaks happen. If your employer rounds times, learn the rounding rule so your personal records match theirs — a five-minute daily gap becomes nearly half an hour a week. Keep your own copy: a quick photo of a paper time card, or your own entries in a tool like ShiftTally, gives you something to compare against your pay stub. Discrepancies are far easier to fix in the same pay period than two months later.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">Watch your break deductions. The most common payroll complaint is a lunch break deducted on a day the employee worked through lunch. If you skipped lunch or took a shorter one, make sure the recorded break minutes reflect reality — with a <strong>time card calculator with lunch</strong> you can instantly see how a 60-minute versus 30-minute deduction changes your paid hours. Night-shift workers should double-check that overnight hours were credited to the right day; some systems assign them to the clock-in date and others to the clock-out date, and mixing conventions creates confusion that looks like missing pay.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">Time card best practices for managers and small businesses</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">For managers, the weekly review is the control that matters. Before approving time cards, scan for the classic red flags: missing clock-outs, break minutes that are suspiciously identical every day, and days over 12 hours that might indicate a data-entry slip rather than a real shift. A <strong>weekly hours calculator</strong> with per-day breakdowns makes this review visual — the outlier day jumps out immediately. Approve in a consistent rhythm, ideally the day the week ends, so corrections happen while memories are fresh.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">Choose your overtime rule deliberately and communicate it. If your state mandates daily overtime, your schedules and your calculator must both reflect it; if you operate under the federal weekly standard, make sure supervisors know that a 10-hour day alone does not create overtime. For businesses with several hourly staff, calculating each person's week separately and then aggregating — exactly what ShiftTally's multi-employee cards do — is far less error-prone than one giant spreadsheet where a single formula drag can corrupt every row. Export a CSV each pay period as your audit trail; it costs nothing and settles disputes in minutes.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">Common time card mistakes (and how to avoid them)</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">Mistake one is the minutes-to-decimals error described earlier: 8:45 is 8.75 hours, not 8.45. Mistake two is forgetting the overnight rollover, which turns a 10 PM&ndash;6 AM shift into negative hours or zero. Mistake three is applying the wrong overtime rule — computing weekly overtime for employees covered by daily overtime law, or vice versa. Mistake four is deducting paid rest breaks as if they were lunch. Mistake five is rounding inconsistently, up one day and down the next. Every one of these is a pure arithmetic or rule-application error, which means every one of them disappears when the calculation is automated and the rule is explicit. That is the entire case for using a purpose-built <strong>time card calculator</strong> instead of mental math or a generic spreadsheet: the rules are encoded, the edge cases are handled, and the same inputs always produce the same answer.</p>
+    <p class="mt-3 text-slate-700 leading-relaxed">One more subtle trap: mixing pay rates within a week. When an employee works two roles at different rates, the FLSA requires a blended &ldquo;regular rate&rdquo; for overtime purposes — you cannot simply pay all overtime at 1.5&times; the lower rate. ShiftTally keeps one rate per employee card, which covers the standard single-rate case cleanly; blended-rate situations should be verified against official guidance or your payroll provider. Similarly, holiday pay, PTO payouts, and shift differentials follow their own rules and sit outside basic time card math.</p>
+
+    <h3 class="mt-8 text-xl font-extrabold text-[#1E3A5F]">Why ShiftTally</h3>
+    <p class="mt-3 text-slate-700 leading-relaxed">Most free time calculators stop at &ldquo;hours between two times.&rdquo; ShiftTally was built for the real payroll week: seven day rows per employee, clock-in and clock-out with break minutes, automatic overnight-shift detection, and three selectable overtime rule sets including California double time. Add as many employee cards as you need — a whole small team fits on one page — and the totals sidebar aggregates regular hours, overtime, double time, and combined gross pay across everyone. Your week auto-saves to your device, so a closed tab never loses data, and one click prints clean time cards or exports a CSV for your records. It is free forever, with no signup, no paywall, and no watermark — just accurate time card math, every week.</p>
+  </article>
+
+  <!-- FAQs -->
+  <section id="faqs" class="mt-8">
+    <h2 class="text-2xl font-extrabold text-[#1E3A5F]">Frequently asked questions</h2>
+    <div class="mt-4 space-y-3">
+      <details class="faq-item bg-white rounded-xl border border-slate-200 shadow-sm">
+        <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4 font-bold text-[#1E3A5F]">How do I calculate total work hours from clock in and out times?<span class="faq-plus text-xl leading-none text-[#1E3A5F]">+</span></summary>
+        <p class="px-4 pb-4 text-slate-600 text-sm leading-relaxed">Subtract the clock-in time from the clock-out time, then subtract unpaid break minutes. For example, 9:00 AM to 5:30 PM is 8.5 hours; minus a 30-minute lunch break it is 8.0 paid hours. ShiftTally does this automatically for every day of the week and adds the days into a weekly total, converting everything to clean decimal hours.</p>
+      </details>
+      <details class="faq-item bg-white rounded-xl border border-slate-200 shadow-sm">
+        <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4 font-bold text-[#1E3A5F]">What is the difference between weekly and daily overtime rules?<span class="faq-plus text-xl leading-none text-[#1E3A5F]">+</span></summary>
+        <p class="px-4 pb-4 text-slate-600 text-sm leading-relaxed">A weekly overtime rule pays time-and-a-half only for hours above 40 in the whole week, which is the US federal FLSA standard. A daily overtime rule pays time-and-a-half for any hours above 8 in a single day, even if the weekly total stays under 40. ShiftTally lets you pick either rule and shows both calculations side by side so you can see the difference instantly.</p>
+      </details>
+      <details class="faq-item bg-white rounded-xl border border-slate-200 shadow-sm">
+        <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4 font-bold text-[#1E3A5F]">How does California overtime work with double time?<span class="faq-plus text-xl leading-none text-[#1E3A5F]">+</span></summary>
+        <p class="px-4 pb-4 text-slate-600 text-sm leading-relaxed">California requires 1.5x pay for hours over 8 in a day (or over 40 in a week) and 2x pay for hours over 12 in a day, plus 1.5x for the first 8 hours and 2x after that on a seventh consecutive workday. ShiftTally's California mode applies all of these tiers automatically and breaks your weekly hours into regular, overtime, and double-time buckets.</p>
+      </details>
+      <details class="faq-item bg-white rounded-xl border border-slate-200 shadow-sm">
+        <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4 font-bold text-[#1E3A5F]">How do I handle overnight shifts that cross midnight?<span class="faq-plus text-xl leading-none text-[#1E3A5F]">+</span></summary>
+        <p class="px-4 pb-4 text-slate-600 text-sm leading-relaxed">Enter the clock-in time normally and enter the clock-out time as the next-day time — for example 10:00 PM in and 6:00 AM out. ShiftTally detects that the clock-out is earlier than the clock-in and automatically rolls it past midnight, adding 24 hours to the math, so an 8-hour night shift calculates correctly.</p>
+      </details>
+      <details class="faq-item bg-white rounded-xl border border-slate-200 shadow-sm">
+        <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4 font-bold text-[#1E3A5F]">How is gross pay calculated from my hours?<span class="faq-plus text-xl leading-none text-[#1E3A5F]">+</span></summary>
+        <p class="px-4 pb-4 text-slate-600 text-sm leading-relaxed">Gross pay equals regular hours times your hourly rate, plus overtime hours times the rate times 1.5, plus double-time hours times the rate times 2. For example, 40 regular hours plus 5 overtime hours at $15 per hour is $600 plus $112.50, or $712.50 before taxes and deductions. ShiftTally shows the exact split for every employee.</p>
+      </details>
+      <details class="faq-item bg-white rounded-xl border border-slate-200 shadow-sm">
+        <summary class="cursor-pointer list-none flex items-center justify-between gap-3 p-4 font-bold text-[#1E3A5F]">Is ShiftTally free, and is my data private?<span class="faq-plus text-xl leading-none text-[#1E3A5F]">+</span></summary>
+        <p class="px-4 pb-4 text-slate-600 text-sm leading-relaxed">Yes, ShiftTally is completely free with unlimited usage, no signup, no paywall, and no watermark. Everything runs in your browser: your time cards are saved only in your own device's local storage so your week is restored when you return, and nothing is ever sent to a server.</p>
+      </details>
+    </div>
+  </section>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="no-print bg-[#1E3A5F] text-slate-300">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="text-sm"><span class="font-extrabold text-white">ShiftTally.</span> Free time card calculator for teams.</div>
+    <nav class="text-sm font-semibold space-x-5">
+      <a href="#top" class="hover:text-[#FACC15] transition">Home</a>
+      <a href="https://fixoraa.tech" class="hover:text-[#FACC15] transition">More Tools</a>
+    </nav>
+  </div>
+  <div class="border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6 py-4 text-xs text-slate-400">ShiftTally provides estimates for planning and verification only and is not payroll or legal advice. Overtime rules vary by jurisdiction; confirm with your payroll provider.</div>
+  </div>
+</footer>
+</body>
+</html>
